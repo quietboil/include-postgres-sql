@@ -1,7 +1,9 @@
 /*!
 This example uses modified sample [chinook](https://github.com/lerocha/chinook-database) database.
+
 The [Chinook_PostgreSql.sql](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_PostgreSql.sql?raw=true)
-was modified - table and column names were changed from camel-case to snake-case and, consequently, double-quotes around names were removed.
+was modified - table and column names were changed from camel-case to snake-case and, consequently, double-quotes around names were removed. The
+modified `Chinook_PostgreSql.sql` can be found in the `etc` directory.
 */
 use postgres::{Config, NoTls, Error};
 use include_postgres_sql::{include_sql, impl_sql};

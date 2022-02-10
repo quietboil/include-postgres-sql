@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, doc = include_str!("../README.md"))]
+#![cfg_attr(docsrs, doc = include_str!("../docs/index.md"))]
 
 pub use include_sql::include_sql;
 
