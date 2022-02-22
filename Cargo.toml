@@ -1,7 +1,7 @@
 [package]
 name = "include-postgres-sql"
 description = "A Yesql inspired macro for using PostgreSQL SQL in Rust" 
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Alex Demenchuk <alexander.demenchuk@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -11,8 +11,10 @@ repository = "https://github.com/quietboil/include-postgres-sql"
 homepage = "https://quietboil.github.io/include-postgres-sql" 
 
 [dependencies]
-postgres = "0.19"
 include-sql = "0.2"
+
+[dev-dependencies]
+postgres = "0.19"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
