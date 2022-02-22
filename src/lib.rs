@@ -125,13 +125,13 @@ macro_rules! decl_method {
             $($tail)*
         }
     };
-    ( $kind:tt $name:ident $doc:literal ($($gen_type:ident)*) ($($fn_params:tt)*) $param:ident # _ $($tail:tt)* ) => {
+    ( $kind:tt $name:ident $doc:literal ($($gen_type:ident)*) ($($fn_params:tt)*) $param:ident # [$gtype:ident] $($tail:tt)* ) => {
         $crate::decl_method!{
             $kind
             $name
             $doc
-            ($($gen_type)* include_sql::to_camel_case!($param))
-            ($($fn_params)* , $param : & [ include_sql::to_camel_case!($param) ] )
+            ($($gen_type)* $gtype)
+            ($($fn_params)* , $param : & [ $gtype ] )
             $($tail)*
         }
     };
@@ -264,12 +264,12 @@ macro_rules! impl_method {
             $($text)+
         }
     };
-    ( $kind:tt $name:ident ($($gen_type:ident)*) ($($fn_params:tt)*) ($param:ident # _ $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+    ( $kind:tt $name:ident ($($gen_type:ident)*) ($($fn_params:tt)*) ($param:ident # [$gtype:ident] $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
         $crate::impl_method!{
             $kind
             $name
-            ($($gen_type)* include_sql::to_camel_case!($param))
-            ($($fn_params)* , $param : & [ include_sql::to_camel_case!($param) ])
+            ($($gen_type)* $gtype)
+            ($($fn_params)* , $param : & [ $gtype ])
             ($($tail)*)
             =>
             ($($pv $param_name)+)

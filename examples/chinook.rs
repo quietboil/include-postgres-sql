@@ -43,6 +43,13 @@ fn main() -> Result<(),Error> {
         Ok(())
     })?;
 
+    db.get_customers_gen("CA", &["Apple Inc.", "Google Inc."], |row| {
+        let first_name : &str = row.try_get("first_name")?;
+        let last_name  : &str = row.try_get("last_name")?;
+        println!("{}, {}", last_name, first_name);
+        Ok(())
+    })?;
+
     let mut tr = db.transaction()?;
     tr.add_new_genre(99, "New Age")?;
     let row = tr.delete_genre(99)?;
