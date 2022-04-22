@@ -1,3 +1,7 @@
+[![crates.io](https://img.shields.io/crates/v/include-postgres-sql)](https://crates.io/crates/include-postgres-sql)
+[![Documentation](https://docs.rs/include-postgres-sql/badge.svg)](https://docs.rs/include-postgres-sql)
+![MIT](https://img.shields.io/crates/l/include-postgres-sql.svg)
+
 **include-postgres-sql** is an extension of [include-sql][1] for using Postgres SQL in Rust. It completes include-sql by providing `impl_sql` macro to generate database access methods from the included SQL. include-postgres-sql uses [Rust-Postgres][2] for database access.
 
 # Example
