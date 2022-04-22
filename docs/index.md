@@ -1,12 +1,17 @@
 **include-postgres-sql** is an extension of [include-sql][1] for using Postgres SQL in Rust. It completes include-sql by providing `impl_sql` macro to generate database access methods from the included SQL. include-postgres-sql uses [Rust-Postgres][2] for database access.
 
+# Features
+
+**include-postgres-sql** has a single feature - `tokio` - which, when selected, makes include-postgres-sql generate async databases access methods that can be used with [tokio-postgres][5].
+
 # Usage
 
-Add `include-postgres-sql` as a dependency:
+Add `include-postgres-sql` and `postgres` as a dependency:
 
 ```toml
 [dependencies]
 include-postgres-sql = "0.1"
+postgres = "0.19"
 ```
 
 Write your SQL and save it in a file. For example, let's say the following is the content of the `library.sql` file that is saved in the project's `src` folder:
@@ -58,6 +63,49 @@ fn main() -> Result<(),Error> {
 
 > **Note** that the path to the SQL file must be specified relative to the project root, i.e. relative to `CARGO_MANIFEST_DIR`, even if you keep your SQL file alongside rust module that includes it. Because include-sql targets stable Rust this requirement will persist until [SourceFile][3] stabilizes.
 
+# Async
+
+Add the following dependencies:
+
+```toml
+[dependencies]
+include-postgres-sql = { version = "0.1", features = ["tokio"] }
+tokio-postgres = "0.7"
+tokio = { version = "1", features = ["full"] }
+```
+
+> **Note** `full` tokio features are not required. This dependency is listed like that for illustration only.
+
+The same SQL as above can then be used in async Rust as:
+
+```rust , ignore
+use include_postgres_sql::{include_sql, impl_sql};
+use tokio_postgres::{Config, NoTls, Error};
+
+include_sql!("src/library.sql");
+
+#[tokio::main]
+fn main() -> Result<(),Error> {
+    let args : Vec<String> = std::env::args().collect();
+    let user_id = &args[1];
+
+    let (db, conn) = Config::new().host("localhost").connect(NoTls).await?;
+    tokio::spawn(async move {
+        if let Err(e) = conn.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    db.get_loaned_books(user_id, |row| {
+        let book_title : &str = row.try_get("book_title")?;
+        println!("{}", book_title);
+        Ok(())
+    }).await?;
+
+    Ok(())
+}
+```
+
 # Anatomy of the Included SQL File
 
 Please see the **Anatomy of the Included SQL File** in [include-sql][4] documentation for the description of the format that include-sql can parse.
@@ -67,7 +115,7 @@ Please see the **Anatomy of the Included SQL File** in [include-sql][4] document
 **include-postgres-sql** generates 3 variants of database access methods using the following selectors:
 * `?` - methods that process rows retrieved by `SELECT`,
 * `!` - methods that execute all other non-`SELECT` methods, and
-* `->` - methods that execute `RETURNING` statements and provide access to returned data.
+* `>` - methods that execute `RETURNING` statements and provide access to returned data.
 
 ## Process Selected Rows
 
@@ -172,3 +220,4 @@ fn loan_books<BookIds: postgres::types::ToSql>(&self, user_id: impl postgres::ty
 [2]: https://crates.io/crates/postgres
 [3]: https://doc.rust-lang.org/proc_macro/struct.SourceFile.html
 [4]: https://quietboil.github.io/include-sql
+[5]: https://crates.io/crates/tokio-postgres

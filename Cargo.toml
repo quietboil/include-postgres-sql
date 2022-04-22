@@ -1,7 +1,7 @@
 [package]
 name = "include-postgres-sql"
 description = "A Yesql inspired macro for using PostgreSQL SQL in Rust" 
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Alex Demenchuk <alexander.demenchuk@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -12,9 +12,50 @@ homepage = "https://quietboil.github.io/include-postgres-sql"
 
 [dependencies]
 include-sql = "0.2"
+futures = { version = "0.3", optional = true }
 
 [dev-dependencies]
 postgres = "0.19"
+tokio-postgres = "0.7"
+tokio = { version = "1", features = ["full"] }
+
+[features]
+tokio = ["include-sql/async", "futures"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "query_no_args"
+path = "examples/async/query_no_args.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "query_one_arg"
+path = "examples/async/query_one_arg.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "query_two_args"
+path = "examples/async/query_two_args.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "query_dyn_args"
+path = "examples/async/query_dyn_args.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "simple_dml"
+path = "examples/async/simple_dml.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "dyn_dml"
+path = "examples/async/dyn_dml.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "returning_dml"
+path = "examples/async/returning_dml.rs"
+required-features = ["tokio"]

@@ -1,11 +1,12 @@
 #![cfg_attr(docsrs, doc = include_str!("../docs/index.md"))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub use include_sql::include_sql;
 
 /**
 Generates Rust code to use included SQL.
 
-This macro defines a trait with methods to access data and implements it for `postgres::Client`.
+This macro defines a trait with methods to access data and implements it for `postgres::Client` and `postgres::Transaction`.
 
 This macro recognizes and generates 3 variants of database access methods using the following selectors:
 * `?` - methods that process rows retrieved by `SELECT`,
@@ -53,7 +54,7 @@ fn loan_books(
 ) -> Result<u64,postgres::Error>;
 ```
 
-For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`->`) like:
+For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`>`) like:
 
 ```sql
 -- name: add_new_book->
@@ -74,6 +75,8 @@ fn add_new_book(
 ) -> Result<postgres::Row,postgres::Error>;
 ```
 */
+#[cfg(not(feature = "tokio"))]
+#[cfg_attr(docsrs, doc(cfg(not(feature = "tokio"))))]
 #[macro_export]
 macro_rules! impl_sql {
     ( $sql_name:ident = $( { $kind:tt $name:ident ($($variant:tt $param:ident $ptype:tt)*) $doc:literal $s:tt $( $text:tt )+ } ),+ ) => {
@@ -89,6 +92,101 @@ macro_rules! impl_sql {
     };
 }
 
+/**
+Generates Rust code to use included SQL.
+
+This macro defines a trait with methods to access data and implements it for `tokio_postgres::Client` and `tokio_postgres::Transaction`.
+
+This macro recognizes and generates 3 variants of database access methods using the following selectors:
+* `?` - methods that process rows retrieved by `SELECT`,
+* `!` - methods that execute all other non-`SELECT` methods, and
+* `->` - methods that execute `RETURNING` statements and provide access to returned data.
+
+For `SELECT` statements (`?`) like:
+
+```sql
+-- name: get_loaned_books?
+-- param: user_id: &str
+SELECT book_title FROM library WHERE loaned_to = :user_id;
+```
+
+The method with the following signature is generated:
+
+```rust , ignore
+async fn get_loaned_books<F>(
+    &self,
+    user_id: &str,
+    row_callback: F
+) -> Result<(),postgres::Error>
+where F: Fn(tokio_postgres::Row) -> Result<(),tokio_postgres::Error>;
+```
+
+> **Note** that the method signature as listed above is provided for illustrative puposes. That "ideal" signature is what
+> include-sql would eventially generate. Alas, until async trait methods are supported, it is not possible. The generated
+> method uses a workaround - dynamic future types - and thus has a slightly different signature.
+
+For non-select statements (`!`) - INSERT, UPDATE, DELETE, etc. - like:
+
+```sql
+-- name: loan_books!
+-- param: user_id: &str
+-- param: book_ids: i32
+UPDATE library
+   SET loaned_to = :user_id
+     , loaned_on = current_timestamp
+ WHERE book_id IN (:book_ids);
+```
+
+The method with the following signature is generated:
+
+```rust , ignore
+async fn loan_books(
+    &self,
+    user_id: &str,
+    book_ids: &[i32]
+) -> Result<u64,tokio_postgres::Error>;
+```
+
+For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`->`) like:
+
+```sql
+-- name: add_new_book->
+-- param: isbn: &str
+-- param: book_title: &str
+INSERT INTO library (isbn, book_title)
+VALUES (:isbn, :book_title)
+RETURNING book_id;
+```
+
+The method with the following signature is generated:
+
+```rust , ignore
+async fn add_new_book(
+    &self,
+    isbn: &str,
+    book_title: &str
+) -> Result<tokio_postgres::Row,tokio_postgres::Error>;
+```
+*/
+#[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
+#[macro_export]
+macro_rules! impl_sql {
+    ( $sql_name:ident = $( { $kind:tt $name:ident ($($variant:tt $param:ident $ptype:tt)*) $doc:literal $s:tt $( $text:tt )+ } ),+ ) => {
+        trait $sql_name {
+            $( $crate::decl_method!{ $kind $name $doc () () () $($param $variant $ptype)* } )+
+        }
+        impl $sql_name for tokio_postgres::Client {
+            $( $crate::impl_method!{ $kind $name () () () ($($param $variant $ptype)*) => ($($variant $param)*) $($text)+ } )+
+        }
+        impl $sql_name for tokio_postgres::Transaction<'_> {
+            $( $crate::impl_method!{ $kind $name () () () ($($param $variant $ptype)*) => ($($variant $param)*) $($text)+ } )+
+        }
+    };
+}
+
+
+#[cfg(not(feature = "tokio"))]
 #[macro_export]
 #[doc(hidden)]
 macro_rules! decl_method {
@@ -147,6 +245,99 @@ macro_rules! decl_method {
     };
 }
 
+#[cfg(feature = "tokio")]
+#[macro_export]
+#[doc(hidden)]
+macro_rules! decl_method {
+    ( ? $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
+        #[doc=$doc]
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)* , row_cb: F)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
+        where
+            F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>,
+            F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+    };
+    ( ! $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
+        #[doc=$doc]
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)*)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+    };
+    ( -> $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
+        #[doc=$doc]
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)*)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident : _ $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)*)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + 'tr)
+            $($tail)*
+        }
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident : ($plt:lifetime & $ptype:ty) $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)* $plt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $plt $ptype)
+            $($tail)*
+        }
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident : ($ptype:ty) $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)*)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : $ptype)
+            $($tail)*
+        }
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident # [$alt:lifetime $gtype:ident] $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)* $alt)
+            ($($gen_type)* , $gtype : tokio_postgres::types::ToSql + 'tr)
+            ($($fn_params)* , $param : & $alt [ $gtype ] )
+            $($tail)*
+        }
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident # ($alt:lifetime $plt:lifetime & $ptype:ty) $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)* $alt $plt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $alt [ & $plt $ptype ] )
+            $($tail)*
+        }
+    };
+    ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident # ($alt:lifetime $ptype:ty) $($tail:tt)* ) => {
+        $crate::decl_method!{
+            $kind
+            $name
+            $doc
+            ($($lt)* $alt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $alt [ $ptype ] )
+            $($tail)*
+        }
+    };
+}
+
+#[cfg(not(feature = "tokio"))]
 #[macro_export]
 #[doc(hidden)]
 macro_rules! impl_method {
@@ -282,6 +473,222 @@ macro_rules! impl_method {
             $name
             ($($gen_type)*)
             ($($fn_params)* , $param : & [ $ptype ])
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+}
+
+#[cfg(feature = "tokio")]
+#[macro_export]
+#[doc(hidden)]
+macro_rules! impl_method {
+    ( ? $name:ident () () () () => () $text:literal ) => {
+        fn $name<'tr, 'st, F>(&'st self, row_cb: F)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr
+        {
+            use futures::stream::TryStreamExt;
+
+            Box::pin(async move {
+                let rows = self.query_raw( $text, [] as [&dyn tokio_postgres::types::ToSql; 0] ).await?;
+                let mut rows = Box::pin(rows);
+                while let Some(row) = rows.try_next().await? {
+                    row_cb(row)?;
+                }
+                Ok::<(),tokio_postgres::Error>(())
+            })
+        }
+    };
+    ( ? $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)*, F>(&'st self $($fn_params)+ , row_cb: F)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use futures::stream::TryStreamExt;
+
+            Box::pin(async move {
+                let rows = self.query_raw(
+                    $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
+                    [& $head as &(dyn tokio_postgres::types::ToSql) $(, & $tail)* ]
+                ).await?;
+                let mut rows = Box::pin(rows);
+                while let Some(row) = rows.try_next().await? {
+                    row_cb(row)?;
+                }
+                Ok::<(),tokio_postgres::Error>(())
+            })
+        }
+    };
+    ( ? $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)+, row_cb: F)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use futures::stream::TryStreamExt;
+
+            Box::pin(async move {
+                let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
+                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut i = 0;
+                $crate::dynamic_sql!(stmt args i $($text)+);
+                let rows = self.query_raw(&stmt, args).await?;
+                let mut rows = Box::pin(rows);
+                while let Some(row) = rows.try_next().await? {
+                    row_cb(row)?;
+                }
+                Ok::<(),tokio_postgres::Error>(())
+            })
+        }
+    };
+    ( ! $name:ident () () () () => () $text:literal ) => {
+        fn $name<'tr, 'st>(&'st self)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr
+        {
+            Box::pin(async move {
+                self.execute( $text, &[] ).await
+            })
+        }
+    };
+    ( ! $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)*>(&'st self $($fn_params)+ )
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            Box::pin(async move {
+                self.execute(
+                    $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
+                    &[& $head as &(dyn tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
+                ).await
+            })
+        }
+    };
+    ( ! $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)+ )
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            Box::pin(async move {
+                let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
+                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut i = 0;
+                $crate::dynamic_sql!(stmt args i $($text)+);
+                self.execute_raw(&stmt, args).await
+            })
+        }
+    };
+    ( -> $name:ident () () () () => () $text:literal ) => {
+        fn $name<'tr, 'st>(&'st self)
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr
+        {
+            Box::pin(async move {
+                self.query_one( $text, &[] ).await
+            })
+        }
+    };
+    ( -> $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)*>(&'st self $($fn_params)+ )
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            Box::pin(async move {
+                self.query_one(
+                    $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
+                    &[& $head as &(dyn tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
+                ).await
+            })
+        }
+    };
+    ( -> $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)+ )
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            Box::pin(async move {
+                let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
+                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut i = 0;
+                $crate::dynamic_sql!(stmt args i $($text)+);
+                self.query_one(&stmt, &args).await
+            })
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident : _ $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)*)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + 'tr)
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident : ($plt:lifetime & $ptype:ty) $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)* $plt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $plt $ptype)
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident : ($ptype:ty) $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)*)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : $ptype)
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident # [$alt:lifetime $gtype:ident] $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)* $alt)
+            ($($gen_type)*  , $gtype : tokio_postgres::types::ToSql + 'tr)
+            ($($fn_params)* , $param : & $alt [ $gtype ])
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident # ($alt:lifetime $plt:lifetime & $ptype:ty) $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)* $alt $plt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $alt [ & $plt $ptype ])
+            ($($tail)*)
+            =>
+            ($($pv $param_name)+)
+            $($text)+
+        }
+    };
+    ( $kind:tt $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ($param:ident # ($alt:lifetime $ptype:ty) $($tail:tt)*) => ($($pv:tt $param_name:ident)+) $($text:tt)+)  => {
+        $crate::impl_method!{
+            $kind
+            $name
+            ($($lt)* $alt)
+            ($($gen_type)*)
+            ($($fn_params)* , $param : & $alt [ $ptype ])
             ($($tail)*)
             =>
             ($($pv $param_name)+)
