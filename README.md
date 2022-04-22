@@ -49,6 +49,36 @@ fn main() -> Result<(),Error> {
 }
 ```
 
+Or, when include-postgres-sql `tokio` feature is selected:
+
+```rust , ignore
+use include_postgres_sql::{include_sql, impl_sql};
+use tokio_postgres::{Config, NoTls, Error};
+
+include_sql!("src/library.sql");
+
+#[tokio::main]
+fn main() -> Result<(),Error> {
+    let args : Vec<String> = std::env::args().collect();
+    let user_id = &args[1];
+
+    let (db, conn) = Config::new().host("localhost").connect(NoTls).await?;
+    tokio::spawn(async move {
+        if let Err(e) = conn.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    db.get_loaned_books(user_id, |row| {
+        let book_title : &str = row.try_get("book_title")?;
+        println!("{}", book_title);
+        Ok(())
+    }).await?;
+
+    Ok(())
+}
+```
+
 # Documentation
 
 The included [documentation][3] describes the supported SQL file format and provides additional details on the generated code.
