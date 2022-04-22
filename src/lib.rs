@@ -74,9 +74,12 @@ fn add_new_book(
     book_title: &str
 ) -> Result<postgres::Row,postgres::Error>;
 ```
+
+### Tokio-Postgres
+
+**Note** that when **include-postgres-sql** is used with `tokio` feature selected the generated methods will be `async`.
 */
 #[cfg(not(feature = "tokio"))]
-#[cfg_attr(docsrs, doc(cfg(not(feature = "tokio"))))]
 #[macro_export]
 macro_rules! impl_sql {
     ( $sql_name:ident = $( { $kind:tt $name:ident ($($variant:tt $param:ident $ptype:tt)*) $doc:literal $s:tt $( $text:tt )+ } ),+ ) => {
@@ -92,84 +95,8 @@ macro_rules! impl_sql {
     };
 }
 
-/**
-Generates Rust code to use included SQL.
 
-This macro defines a trait with methods to access data and implements it for `tokio_postgres::Client` and `tokio_postgres::Transaction`.
-
-This macro recognizes and generates 3 variants of database access methods using the following selectors:
-* `?` - methods that process rows retrieved by `SELECT`,
-* `!` - methods that execute all other non-`SELECT` methods, and
-* `->` - methods that execute `RETURNING` statements and provide access to returned data.
-
-For `SELECT` statements (`?`) like:
-
-```sql
--- name: get_loaned_books?
--- param: user_id: &str
-SELECT book_title FROM library WHERE loaned_to = :user_id;
-```
-
-The method with the following signature is generated:
-
-```rust , ignore
-async fn get_loaned_books<F>(
-    &self,
-    user_id: &str,
-    row_callback: F
-) -> Result<(),postgres::Error>
-where F: Fn(tokio_postgres::Row) -> Result<(),tokio_postgres::Error>;
-```
-
-> **Note** that the method signature as listed above is provided for illustrative puposes. That "ideal" signature is what
-> include-sql would eventially generate. Alas, until async trait methods are supported, it is not possible. The generated
-> method uses a workaround - dynamic future types - and thus has a slightly different signature.
-
-For non-select statements (`!`) - INSERT, UPDATE, DELETE, etc. - like:
-
-```sql
--- name: loan_books!
--- param: user_id: &str
--- param: book_ids: i32
-UPDATE library
-   SET loaned_to = :user_id
-     , loaned_on = current_timestamp
- WHERE book_id IN (:book_ids);
-```
-
-The method with the following signature is generated:
-
-```rust , ignore
-async fn loan_books(
-    &self,
-    user_id: &str,
-    book_ids: &[i32]
-) -> Result<u64,tokio_postgres::Error>;
-```
-
-For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`->`) like:
-
-```sql
--- name: add_new_book->
--- param: isbn: &str
--- param: book_title: &str
-INSERT INTO library (isbn, book_title)
-VALUES (:isbn, :book_title)
-RETURNING book_id;
-```
-
-The method with the following signature is generated:
-
-```rust , ignore
-async fn add_new_book(
-    &self,
-    isbn: &str,
-    book_title: &str
-) -> Result<tokio_postgres::Row,tokio_postgres::Error>;
-```
-*/
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 #[macro_export]
 macro_rules! impl_sql {
     ( $sql_name:ident = $( { $kind:tt $name:ident ($($variant:tt $param:ident $ptype:tt)*) $doc:literal $s:tt $( $text:tt )+ } ),+ ) => {
