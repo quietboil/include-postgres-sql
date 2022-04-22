@@ -115,7 +115,7 @@ Please see the **Anatomy of the Included SQL File** in [include-sql][4] document
 **include-postgres-sql** generates 3 variants of database access methods using the following selectors:
 * `?` - methods that process rows retrieved by `SELECT`,
 * `!` - methods that execute all other non-`SELECT` methods, and
-* `>` - methods that execute `RETURNING` statements and provide access to returned data.
+* `->` - methods that execute `RETURNING` statements and provide access to returned data.
 
 ## Process Selected Rows
 

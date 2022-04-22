@@ -54,7 +54,7 @@ fn loan_books(
 ) -> Result<u64,postgres::Error>;
 ```
 
-For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`>`) like:
+For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`->`) like:
 
 ```sql
 -- name: add_new_book->
