@@ -179,21 +179,21 @@ macro_rules! decl_method {
     ( ? $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
         #[doc=$doc]
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)* , row_cb: F)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + Send + 'tr>>
         where
             F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>,
-            F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+            F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
     };
     ( ! $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
         #[doc=$doc]
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)*)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
     };
     ( -> $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
         #[doc=$doc]
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)*)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
     };
     ( $kind:tt $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) $param:ident : _ $($tail:tt)* ) => {
@@ -203,7 +203,7 @@ macro_rules! decl_method {
             $doc
             ($($lt)*)
             ($($gen_type)*)
-            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + 'tr)
+            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + Sync + Send + 'tr)
             $($tail)*
         }
     };
@@ -235,7 +235,7 @@ macro_rules! decl_method {
             $name
             $doc
             ($($lt)* $alt)
-            ($($gen_type)* , $gtype : tokio_postgres::types::ToSql + 'tr)
+            ($($gen_type)* , $gtype : tokio_postgres::types::ToSql + Sync + Send + 'tr)
             ($($fn_params)* , $param : & $alt [ $gtype ] )
             $($tail)*
         }
@@ -414,13 +414,13 @@ macro_rules! impl_method {
 macro_rules! impl_method {
     ( ? $name:ident () () () () => () $text:literal ) => {
         fn $name<'tr, 'st, F>(&'st self, row_cb: F)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
-        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + Send + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr
         {
             use futures::stream::TryStreamExt;
 
             Box::pin(async move {
-                let rows = self.query_raw( $text, [] as [&dyn tokio_postgres::types::ToSql; 0] ).await?;
+                let rows = self.query_raw( $text, [] as [&(dyn tokio_postgres::types::ToSql + Sync); 0] ).await?;
                 let mut rows = Box::pin(rows);
                 while let Some(row) = rows.try_next().await? {
                     row_cb(row)?;
@@ -431,15 +431,15 @@ macro_rules! impl_method {
     };
     ( ? $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)*, F>(&'st self $($fn_params)+ , row_cb: F)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
-        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + Send + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             use futures::stream::TryStreamExt;
 
             Box::pin(async move {
                 let rows = self.query_raw(
                     $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
-                    [& $head as &(dyn tokio_postgres::types::ToSql) $(, & $tail)* ]
+                    [& $head as &(dyn tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
                 ).await?;
                 let mut rows = Box::pin(rows);
                 while let Some(row) = rows.try_next().await? {
@@ -451,14 +451,14 @@ macro_rules! impl_method {
     };
     ( ? $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)+, row_cb: F)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + 'tr>>
-        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<(),tokio_postgres::Error>> + Send + 'tr>>
+        where F: Fn(tokio_postgres::Row) -> std::result::Result<(),tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             use futures::stream::TryStreamExt;
 
             Box::pin(async move {
                 let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
-                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut args = Vec::<&(dyn tokio_postgres::types::ToSql + Sync)>::with_capacity($crate::num_args!($($pv $param)+));
                 let mut i = 0;
                 $crate::dynamic_sql!(stmt args i $($text)+);
                 let rows = self.query_raw(&stmt, args).await?;
@@ -472,7 +472,7 @@ macro_rules! impl_method {
     };
     ( ! $name:ident () () () () => () $text:literal ) => {
         fn $name<'tr, 'st>(&'st self)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr
         {
             Box::pin(async move {
@@ -482,7 +482,7 @@ macro_rules! impl_method {
     };
     ( ! $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)*>(&'st self $($fn_params)+ )
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             Box::pin(async move {
@@ -495,12 +495,12 @@ macro_rules! impl_method {
     };
     ( ! $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)+ )
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<u64,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             Box::pin(async move {
                 let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
-                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut args = Vec::<&(dyn tokio_postgres::types::ToSql + Sync)>::with_capacity($crate::num_args!($($pv $param)+));
                 let mut i = 0;
                 $crate::dynamic_sql!(stmt args i $($text)+);
                 self.execute_raw(&stmt, args).await
@@ -509,7 +509,7 @@ macro_rules! impl_method {
     };
     ( -> $name:ident () () () () => () $text:literal ) => {
         fn $name<'tr, 'st>(&'st self)
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr
         {
             Box::pin(async move {
@@ -519,7 +519,7 @@ macro_rules! impl_method {
     };
     ( -> $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)*>(&'st self $($fn_params)+ )
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             Box::pin(async move {
@@ -532,12 +532,12 @@ macro_rules! impl_method {
     };
     ( -> $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)+ )
-        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + 'tr>>
+        -> core::pin::Pin<Box<dyn core::future::Future<Output = core::result::Result<tokio_postgres::Row,tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             Box::pin(async move {
                 let mut stmt = String::with_capacity($crate::sql_len!($($text)+));
-                let mut args = Vec::<&dyn tokio_postgres::types::ToSql>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut args = Vec::<&(dyn tokio_postgres::types::ToSql + Sync)>::with_capacity($crate::num_args!($($pv $param)+));
                 let mut i = 0;
                 $crate::dynamic_sql!(stmt args i $($text)+);
                 self.query_one(&stmt, &args).await
@@ -550,7 +550,7 @@ macro_rules! impl_method {
             $name
             ($($lt)*)
             ($($gen_type)*)
-            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + 'tr)
+            ($($fn_params)* , $param : impl tokio_postgres::types::ToSql + Sync + Send + 'tr)
             ($($tail)*)
             =>
             ($($pv $param_name)+)
@@ -588,7 +588,7 @@ macro_rules! impl_method {
             $kind
             $name
             ($($lt)* $alt)
-            ($($gen_type)*  , $gtype : tokio_postgres::types::ToSql + 'tr)
+            ($($gen_type)*  , $gtype : tokio_postgres::types::ToSql + Sync + Send + 'tr)
             ($($fn_params)* , $param : & $alt [ $gtype ])
             ($($tail)*)
             =>

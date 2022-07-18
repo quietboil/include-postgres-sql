@@ -1,7 +1,7 @@
 [package]
 name = "include-postgres-sql"
 description = "A Yesql inspired macro for using PostgreSQL SQL in Rust" 
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Alex Demenchuk <alexander.demenchuk@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -17,6 +17,7 @@ futures = { version = "0.3", optional = true }
 [dev-dependencies]
 postgres = "0.19"
 tokio-postgres = "0.7"
+bb8-postgres = "0.8"
 tokio = { version = "1", features = ["full"] }
 
 [features]
@@ -58,4 +59,9 @@ required-features = ["tokio"]
 [[example]]
 name = "returning_dml"
 path = "examples/async/returning_dml.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "bb8_pool"
+path = "examples/async/bb8_pool.rs"
 required-features = ["tokio"]
