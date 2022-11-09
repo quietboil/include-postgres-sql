@@ -12,7 +12,7 @@ homepage = "https://quietboil.github.io/include-postgres-sql"
 
 [dependencies]
 include-sql = "0.2"
-futures = { version = "0.3", optional = true }
+futures-util = { version = "0.3", optional = true }
 
 [dev-dependencies]
 postgres = "0.19"
@@ -21,7 +21,7 @@ bb8-postgres = "0.8"
 tokio = { version = "1", features = ["full"] }
 
 [features]
-tokio = ["include-sql/async", "futures"]
+tokio = ["include-sql/async", "futures-util"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

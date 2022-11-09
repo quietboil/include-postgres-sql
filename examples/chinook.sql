@@ -30,7 +30,7 @@ SELECT artist.name AS artist_name
 
 -- name: get_customers?
 -- Retrieves names of the customers from the specified state
--- that work at the specified compaies
+-- that work at the specified companies
 -- ## Parameters
 -- param: state: &str - state abbreviation
 -- param: companies: &str - names of companies
@@ -42,7 +42,7 @@ SELECT DISTINCT last_name, first_name
 
 -- name: get_customers_gen?
 -- Retrieves names of the customers from the specified state
--- that work at the specified compaies
+-- that work at the specified companies
 SELECT DISTINCT last_name, first_name
   FROM customer
  WHERE state = :state

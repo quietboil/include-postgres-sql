@@ -13,7 +13,7 @@ include_sql!("examples/chinook.sql");
 fn main() -> Result<(),Error> {
     let mut args = std::env::args();
     let _ = args.next();
-    let artist = args.next().expect("match artist pattern");
+    let artist = args.next().expect("artist search pattern");
 
     let mut db = Config::new()
         .host("localhost")
