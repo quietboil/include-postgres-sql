@@ -61,7 +61,7 @@ fn main() -> Result<(),Error> {
 }
 ```
 
-> **Note** that the path to the SQL file must be specified relative to the project root, i.e. relative to `CARGO_MANIFEST_DIR`, even if you keep your SQL file alongside rust module that includes it. Because include-sql targets stable Rust this requirement will persist until [SourceFile][3] stabilizes.
+> **Note** that the path to the SQL file must be specified relative to the project root, i.e. relative to `CARGO_MANIFEST_DIR`, even if you keep your SQL file alongside rust module that includes it. Because include-sql targets stable Rust, this requirement will persist until [SourceFile][3] stabilizes.
 
 # Async
 
@@ -74,7 +74,7 @@ tokio-postgres = "0.7"
 tokio = { version = "1", features = ["full"] }
 ```
 
-> **Note** `full` tokio features are not required. This dependency is listed like that for illustration only.
+> **Note** `full` tokio features are not required. `tokio` dependency is listed like that for illustration only.
 
 The same SQL as above can then be used in async Rust as:
 
@@ -112,12 +112,16 @@ Please see the **Anatomy of the Included SQL File** in [include-sql][4] document
 
 # Generated Methods
 
-**include-postgres-sql** generates 3 variants of database access methods using the following selectors:
+**include-postgres-sql** generates 5 variants of database access methods using the following selectors:
 * `?` - methods that process rows retrieved by `SELECT`,
+* `^` - methods that return rows retrieved by `SELECT` (as `postgres::RowIter` or `tokio_postgres::RowStream` ),
+* `%` - methods that extract data from selected rows into row specific structs and return them as `Vec`,
 * `!` - methods that execute all other non-`SELECT` methods, and
 * `->` - methods that execute `RETURNING` statements and provide access to returned data.
 
 ## Process Selected Rows
+
+### Callback
 
 For the `SELECT` statement like:
 
@@ -137,6 +141,72 @@ where F: Fn(postgres::Row) -> Result<(),postgres::Error>;
 Where:
 - `user_id` is a parameter that has the same name as the SQL parameter with the declared (in the SQL) type as `&str`.
 - `F` is a type of a callback (closure) that the method implementation will call to process each row.
+
+### Row Iterator
+
+When the same `SELECT` statement is tagged as `^`:
+
+```sql
+-- name: get_loaned_books^
+-- param: user_id: &str
+SELECT book_title FROM library WHERE loaned_to = :user_id;
+```
+
+Then a regular `postgres` variant of the generated method will have the following signature:
+
+```rust , ignore
+fn get_loaned_books<'a>(&'a self, user_id: &str) -> Result<postgres::RowIter<'a>,postgres::Error>;
+```
+
+### Row Stream
+
+For the same - tagged as `^` - `SELECT` statement the `tokio-postgres` variant, i.e. when `tokio` feature is used, of the generated method will have the following signature:
+
+```rust , ignore
+async fn get_loaned_books(&self, user_id: &str) -> Result<tokio_postgres::RowStream,tokio_postgres::Error>;
+```
+
+### Vector
+
+When the same `SELECT` statement is tagged as `%`:
+
+```sql
+-- name: get_loaned_books%
+-- param: user_id: &str
+SELECT isbn, book_title FROM library WHERE loaned_to = :user_id;
+```
+
+Then a regular `postgres` variant of the generated method will have the following signature:
+
+```rust , ignore
+fn get_loaned_books<R>(&self, user_id: &str) -> Result<Vec<R>,postgres::Error>
+where R: TryFrom<Row>, postgres::Error: From<R::Error>;;
+```
+
+It requires a struct defines that is capable deserializing a returned `Row`. For example, to deserialize the rows from the above query the following struct can be defined:
+
+```rust , ignore
+struct LoanedBook {
+    isbn: String,
+    title: String,
+}
+
+impl TryFrom<postgres::Row> for LoanedBook {
+    type Error = postgres::Error;
+
+    fn try_from(row: postgres::Row) -> Result<Self, Self::Error> {
+        let isbn  = row.try_get(0)?;
+        let title = row.try_get(1)?;
+        Ok(Self {isbn, title})
+    }
+}
+```
+
+Then the entire result set can be retrieved as:
+
+```rust , ignore
+let loaned_books : Vec<LoanedBook> = db.get_loaned_books(user_id)?;
+```
 
 ## Execute Non-Select Statements
 

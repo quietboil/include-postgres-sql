@@ -3,7 +3,7 @@ Generates Rust code to use included SQL.
 
 This macro defines a trait with methods to access data and implements it for `postgres::Client` and `postgres::Transaction`.
 
-This macro recognizes and generates 3 variants of database access methods using the following selectors:
+This macro recognizes and generates 5 variants of database access methods using the following selectors:
 * `?` - methods that process rows retrieved by `SELECT`,
 * `^` - methods that return raw rows retrieved by `SELECT`,
 * `%` - methods that return vector of structs (a struct per returned row)
