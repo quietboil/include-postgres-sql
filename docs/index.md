@@ -286,8 +286,13 @@ The signature of the generated method would be:
 fn loan_books<BookIds: postgres::types::ToSql>(&self, user_id: impl postgres::types::ToSql, book_ids: &[BookIds]) -> Result<u64,postgres::Error>;
 ```
 
+# Examples
+
+**include-postgres-sql** integration [tests][6] are written as tiny applications that can be used as examples of various usages of included SQL.
+
 [1]: https://crates.io/crates/include-sql
 [2]: https://crates.io/crates/postgres
 [3]: https://doc.rust-lang.org/proc_macro/struct.SourceFile.html
 [4]: https://quietboil.github.io/include-sql
 [5]: https://crates.io/crates/tokio-postgres
+[6]: https://github.com/quietboil/include-postgres-sql/tree/master/tests
