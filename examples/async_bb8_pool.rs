@@ -1,6 +1,6 @@
 use include_postgres_sql::*;
 
-include_sql!("examples/async/query_no_args.sql");
+include_sql!("tests/sql/query_no_args.sql");
 
 #[tokio::main]
 async fn main() -> Result<(), tokio_postgres::Error> {

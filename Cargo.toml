@@ -27,41 +27,6 @@ tokio = ["include-sql/async", "futures-util"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[example]]
-name = "query_no_args"
-path = "examples/async/query_no_args.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "query_one_arg"
-path = "examples/async/query_one_arg.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "query_two_args"
-path = "examples/async/query_two_args.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "query_dyn_args"
-path = "examples/async/query_dyn_args.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "simple_dml"
-path = "examples/async/simple_dml.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "dyn_dml"
-path = "examples/async/dyn_dml.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "returning_dml"
-path = "examples/async/returning_dml.rs"
-required-features = ["tokio"]
-
-[[example]]
-name = "bb8_pool"
-path = "examples/async/bb8_pool.rs"
+name = "async_bb8_pool"
+path = "examples/async_bb8_pool.rs"
 required-features = ["tokio"]

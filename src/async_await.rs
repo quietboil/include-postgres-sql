@@ -21,8 +21,20 @@ macro_rules! decl_method {
         fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)* , row_cb: F)
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
         where
-            F: Fn(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>,
+            F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>,
             F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+    };
+    ( ^ $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
+        #[doc=$doc]
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)*)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
+    };
+    ( % $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
+        #[doc=$doc]
+        fn $name<'tr, 'st $(, $lt)* $($gen_type : ::tokio_postgres::types::ToSql)*, R>(&'st self $($fn_params)*) 
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
+        where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*;
     };
     ( ! $name:ident $doc:literal ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)*) ) => {
         #[doc=$doc]
@@ -108,9 +120,9 @@ macro_rules! decl_method {
 #[doc(hidden)]
 macro_rules! impl_method {
     ( ? $name:ident () () () () => () $text:literal ) => {
-        fn $name<'tr, 'st, F>(&'st self, row_cb: F)
+        fn $name<'tr, 'st, F>(&'st self, mut row_cb: F)
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
-        where F: Fn(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr
+        where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr
         {
             use ::futures_util::TryStreamExt;
 
@@ -125,9 +137,9 @@ macro_rules! impl_method {
         }
     };
     ( ? $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
-        fn $name<'tr, 'st $(, $lt)*, F>(&'st self $($fn_params)+ , row_cb: F)
+        fn $name<'tr, 'st $(, $lt)*, F>(&'st self $($fn_params)+ , mut row_cb: F)
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
-        where F: Fn(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             use ::futures_util::TryStreamExt;
 
@@ -145,9 +157,9 @@ macro_rules! impl_method {
         }
     };
     ( ? $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
-        fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)+, row_cb: F)
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*, F>(&'st self $($fn_params)+, mut row_cb: F)
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
-        where F: Fn(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
             use ::futures_util::TryStreamExt;
 
@@ -162,6 +174,113 @@ macro_rules! impl_method {
                     row_cb(row)?;
                 }
                 Ok::<(),::tokio_postgres::Error>(())
+            })
+        }
+    };
+    ( ^ $name:ident () () () () => () $text:literal ) => {
+        fn $name<'tr, 'st>(&'st self)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
+        where Self: 'tr, 'st: 'tr
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(
+                self.query_raw( $text, [] as [&(dyn ::tokio_postgres::types::ToSql + Sync); 0] )
+            )
+        }
+    };
+    ( ^ $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)*>(&'st self $($fn_params)+)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(async move {
+                self.query_raw(
+                    $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
+                    [& $head as &(dyn ::tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
+                ).await
+            })
+        }
+    };
+    ( ^ $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*>(&'st self $($fn_params)+)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
+        where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(async move {
+                let mut stmt = ::std::string::String::with_capacity($crate::sql_len!($($text)+));
+                let mut args = ::std::vec::Vec::<&(dyn ::tokio_postgres::types::ToSql + Sync)>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut i = 0;
+                $crate::dynamic_sql!(stmt args i $($text)+);
+                self.query_raw(&stmt, args).await
+            })
+        }
+    };
+    ( % $name:ident () () () () => () $text:literal ) => {
+        fn $name<'tr, 'st, R>(&'st self)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
+        where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(async move {
+                let rows = self.query_raw( $text, [] as [&(dyn ::tokio_postgres::types::ToSql + Sync); 0] ).await?;
+                ::futures_util::pin_mut!(rows);
+                let mut data = ::std::vec::Vec::new();
+                while let Some(row) = rows.try_next().await? {
+                    let item = R::try_from(row)?;
+                    data.push(item);
+                }
+                Ok(data)
+            })
+        }
+    };
+    ( % $name:ident ($($lt:lifetime)*) () ($($fn_params:tt)+) () => (: $head:ident $(: $tail:ident)*) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)*, R>(&'st self $($fn_params)+)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
+        where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(async move {
+                let rows = self.query_raw(
+                    $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
+                    [& $head as &(dyn ::tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
+                ).await?;
+                ::futures_util::pin_mut!(rows);
+                let mut data = ::std::vec::Vec::new();
+                while let Some(row) = rows.try_next().await? {
+                    let item = R::try_from(row)?;
+                    data.push(item);
+                }
+                Ok(data)
+            })
+        }
+    };
+    ( % $name:ident ($($lt:lifetime)*) ($($gen_type:tt)*) ($($fn_params:tt)+) () => ($($pv:tt $param:ident)+) $($text:tt)+) => {
+        fn $name<'tr, 'st $(, $lt)* $($gen_type)*, R>(&'st self $($fn_params)+)
+        -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
+        where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
+        {
+            use ::futures_util::TryStreamExt;
+
+            ::std::boxed::Box::pin(async move {
+                let mut stmt = ::std::string::String::with_capacity($crate::sql_len!($($text)+));
+                let mut args = ::std::vec::Vec::<&(dyn ::tokio_postgres::types::ToSql + Sync)>::with_capacity($crate::num_args!($($pv $param)+));
+                let mut i = 0;
+                $crate::dynamic_sql!(stmt args i $($text)+);
+                let rows = self.query_raw(&stmt, args).await?;
+                ::futures_util::pin_mut!(rows);
+                let mut data = ::std::vec::Vec::new();
+                while let Some(row) = rows.try_next().await? {
+                    let item = R::try_from(row)?;
+                    data.push(item);
+                }
+                Ok(data)
             })
         }
     };
