@@ -140,7 +140,7 @@ macro_rules! decl_method {
     };
     ( % $name:ident $doc:literal ($($gen_type:ident)*) ($($fn_params:tt)*) ) => {
         #[doc=$doc]
-        fn $name<$($gen_type : ::postgres::types::ToSql),* R>(&mut self $($fn_params)*) -> ::std::result::Result<::std::vec::Vec<R>,::postgres::Error>
+        fn $name<$($gen_type : ::postgres::types::ToSql ,)* R>(&mut self $($fn_params)*) -> ::std::result::Result<::std::vec::Vec<R>,::postgres::Error>
         where R: ::std::convert::TryFrom<::postgres::Row>, ::postgres::Error: ::std::convert::From<R::Error>;
     };
     ( ! $name:ident $doc:literal ($($gen_type:ident)*) ($($fn_params:tt)*) ) => {
