@@ -6,27 +6,35 @@
 
 # Example
 
-Write your SQL and save it in a file. For example, let's say the following is saved as `library.sql` in the project's `src` folder:
+Write your SQL and save it in a file. For example, let's say the following is saved as `library.sql` in the project's `sql` folder:
 
 ```sql
 -- name: get_loaned_books?
+--
 -- Returns the list of books loaned to a patron
+--
 -- # Parameters
+--
 -- param: user_id: &str - user ID
+--
 SELECT book_title
   FROM library
  WHERE loaned_to = :user_id
- ORDER BY 1;
+ ORDER BY 1
 
 -- name: loan_books!
+--
 -- Updates the book records to reflect loan to a patron
+--
 -- # Parameters
+--
+-- param: book_titles: &str - book titles
 -- param: user_id: &str - user ID
--- param: book_ids: i32 - book IDs
+--
 UPDATE library
    SET loaned_to = :user_id
      , loaned_on = current_timestamp
- WHERE book_id IN (:book_ids);
+ WHERE book_title IN (:book_titles)
 ```
 
 And then use it in Rust as:
@@ -35,17 +43,16 @@ And then use it in Rust as:
 use include_postgres_sql::{include_sql, impl_sql};
 use postgres::{Config, NoTls, Error};
 
-include_sql!("src/library.sql");
+include_sql!("sql/library.sql");
 
 fn main() -> Result<(),Error> {
-    let args : Vec<String> = std::env::args().collect();
-    let user_id = &args[1];
-
     let mut db = Config::new().host("localhost").connect(NoTls)?;
 
-    db.get_loaned_books(user_id, |row| {
-        let book_title : &str = row.try_get("book_title")?;
-        println!("{}", book_title);
+    db.loan_books(&["War and Peace", "Gone With the Wind"], "Sheldon Cooper")?;
+
+    db.get_loaned_books("Sheldon Cooper", |row| {
+        let book_title : &str = row.try_get(0)?;
+        println!("{book_title}");
         Ok(())
     })?;
 
@@ -59,13 +66,10 @@ Or, when include-postgres-sql `tokio` feature is selected:
 use include_postgres_sql::{include_sql, impl_sql};
 use tokio_postgres::{Config, NoTls, Error};
 
-include_sql!("src/library.sql");
+include_sql!("sql/library.sql");
 
 #[tokio::main]
 fn main() -> Result<(),Error> {
-    let args : Vec<String> = std::env::args().collect();
-    let user_id = &args[1];
-
     let (db, conn) = Config::new().host("localhost").connect(NoTls).await?;
     tokio::spawn(async move {
         if let Err(e) = conn.await {
@@ -73,9 +77,11 @@ fn main() -> Result<(),Error> {
         }
     });
 
-    db.get_loaned_books(user_id, |row| {
-        let book_title : &str = row.try_get("book_title")?;
-        println!("{}", book_title);
+    db.loan_books(&["War and Peace", "Gone With the Wind"], "Sheldon Cooper").await?;
+
+    db.get_loaned_books("Sheldon Cooper", |row| {
+        let book_title : &str = row.try_get(0)?;
+        println!("{book_title}");
         Ok(())
     }).await?;
 
@@ -86,6 +92,10 @@ fn main() -> Result<(),Error> {
 # Documentation
 
 The included [documentation][3] describes the supported SQL file format and provides additional details on the generated code.
+
+# 💥 Breaking Changes in 0.2
+
+* [include-sql][1] changed optional statement terminator from `;` to `/`. SQL files that used `;` terminator would need to change it to `/` or remove it completely.
 
 [1]: https://crates.io/crates/include-sql
 [2]: https://crates.io/crates/postgres

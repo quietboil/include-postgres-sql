@@ -15,17 +15,13 @@ For `SELECT` statements (`?`) like:
 ```sql
 -- name: get_loaned_books?
 -- param: user_id: &str
-SELECT book_title FROM library WHERE loaned_to = :user_id;
+SELECT book_title FROM library WHERE loaned_to = :user_id
 ```
 
 The method with the following signature is generated:
 
 ```rust , ignore
-fn get_loaned_books<F>(
-    &self,
-    user_id: &str,
-    row_callback: F
-) -> Result<(),postgres::Error>
+fn get_loaned_books<F>(&self, user_id: &str, row_callback: F) -> Result<(),postgres::Error>
 where F: FnMut(postgres::Row) -> Result<(),postgres::Error>;
 ```
 
@@ -34,16 +30,13 @@ For `SELECT` statements (`^`):
 ```sql
 -- name: get_loaned_books^
 -- param: user_id: &str
-SELECT book_title FROM library WHERE loaned_to = :user_id;
+SELECT book_title FROM library WHERE loaned_to = :user_id
 ```
 
 The method with the following signature is generated:
 
 ```rust , ignore
-fn get_loaned_books<'a>(
-    &'a self,
-    user_id: &str
-) -> Result<postgres::RowIter<'a>,postgres::Error>;
+fn get_loaned_books<'a>(&'a self, user_id: &str) -> Result<postgres::RowIter<'a>,postgres::Error>;
 ```
 
 For `SELECT` statements (`%`):
@@ -51,16 +44,13 @@ For `SELECT` statements (`%`):
 ```sql
 -- name: get_loaned_books%
 -- param: user_id: &str
-SELECT book_title FROM library WHERE loaned_to = :user_id;
+SELECT book_title FROM library WHERE loaned_to = :user_id
 ```
 
 The method with the following signature is generated:
 
 ```rust , ignore
-fn get_loaned_books<R>(
-    &self,
-    user_id: &str
-) -> Result<Vec<R>,postgres::Error>
+fn get_loaned_books<R>(&self, user_id: &str) -> Result<Vec<R>,postgres::Error>
 where R: TryFrom<postres::Row>, postgres::Error: From<R::Error>;
 ```
 
@@ -73,17 +63,13 @@ For non-select statements (`!`) - INSERT, UPDATE, DELETE, etc. - like:
 UPDATE library
    SET loaned_to = :user_id
      , loaned_on = current_timestamp
- WHERE book_id IN (:book_ids);
+ WHERE book_id IN (:book_ids)
 ```
 
 The method with the following signature is generated:
 
 ```rust , ignore
-fn loan_books(
-    &self,
-    user_id: &str,
-    book_ids: &[i32]
-) -> Result<u64,postgres::Error>;
+fn loan_books(&self, user_id: &str, book_ids: &[i32]) -> Result<u64,postgres::Error>;
 ```
 
 For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` clause (`->`) like:
@@ -94,22 +80,18 @@ For DELETE, INSERT, and UPDATE statements that return data via `RETURNING` claus
 -- param: book_title: &str
 INSERT INTO library (isbn, book_title)
 VALUES (:isbn, :book_title)
-RETURNING book_id;
+RETURNING book_id
 ```
 
 The method with the following signature is generated:
 
 ```rust , ignore
-fn add_new_book(
-    &self,
-    isbn: &str,
-    book_title: &str
-) -> Result<postgres::Row,postgres::Error>;
+fn add_new_book(&self, isbn: &str, book_title: &str) -> Result<postgres::Row,postgres::Error>;
 ```
 
 ### Tokio-Postgres
 
-**Note** that when **include-postgres-sql** is used with `tokio` feature, the generated methods will be `async`.
+**Note** that when **include-postgres-sql** is used with the `tokio` feature, the generated methods will be `async`.
 */
 #[macro_export]
 macro_rules! impl_sql {

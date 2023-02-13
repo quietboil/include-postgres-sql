@@ -3,10 +3,13 @@
 
 pub use include_sql::include_sql;
 
+#[doc(hidden)]
 pub mod util;
 
 #[cfg(feature = "tokio")]
+#[doc(hidden)]
 pub mod async_await;
 
 #[cfg(not(feature = "tokio"))]
+#[doc(hidden)]
 pub mod sync;

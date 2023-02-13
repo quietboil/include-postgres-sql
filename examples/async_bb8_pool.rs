@@ -1,7 +1,8 @@
 use include_postgres_sql::*;
 
 include_sql!("tests/sql/query_no_args.sql");
-
+    
+#[cfg(feature = "tokio")]
 #[tokio::main]
 async fn main() -> Result<(), tokio_postgres::Error> {
     use bb8_postgres::PostgresConnectionManager;
@@ -33,3 +34,6 @@ async fn main() -> Result<(), tokio_postgres::Error> {
     }
     Ok(())
 }
+
+#[cfg(not(feature = "tokio"))]
+fn main() {}

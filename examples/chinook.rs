@@ -5,12 +5,14 @@ The [Chinook_PostgreSql.sql](https://github.com/lerocha/chinook-database/blob/ma
 was modified - table and column names were changed from camel-case to snake-case and, consequently, double-quotes around names were removed. The
 modified `Chinook_PostgreSql.sql` can be found in the `etc` directory.
 */
-use postgres::{Config, NoTls, Error};
-use include_postgres_sql::{include_sql, impl_sql};
+use include_postgres_sql::*;
 
 include_sql!("examples/chinook.sql");
 
-fn main() -> Result<(),Error> {
+#[cfg(not(feature = "tokio"))]
+fn main() -> Result<(),postgres::Error> {
+    use postgres::{Config, NoTls};
+
     let mut args = std::env::args();
     let _ = args.next();
     let artist = args.next().expect("artist search pattern");
@@ -59,3 +61,6 @@ fn main() -> Result<(),Error> {
 
     Ok(())
 }
+
+#[cfg(feature = "tokio")]
+fn main() {}
