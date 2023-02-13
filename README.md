@@ -69,7 +69,7 @@ use tokio_postgres::{Config, NoTls, Error};
 include_sql!("sql/library.sql");
 
 #[tokio::main]
-fn main() -> Result<(),Error> {
+async fn main() -> Result<(),Error> {
     let (db, conn) = Config::new().host("localhost").connect(NoTls).await?;
     tokio::spawn(async move {
         if let Err(e) = conn.await {
