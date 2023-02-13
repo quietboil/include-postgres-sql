@@ -11,7 +11,7 @@ repository = "https://github.com/quietboil/include-postgres-sql"
 homepage = "https://quietboil.github.io/include-postgres-sql" 
 
 [dependencies]
-include-sql = "0.2"
+include-sql = "0.3"
 futures-util = { version = "0.3", optional = true }
 
 [dev-dependencies]

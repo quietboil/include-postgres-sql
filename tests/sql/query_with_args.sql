@@ -13,4 +13,4 @@ SELECT artist.name AS artist_name, track.name AS track_name, Sum(invoice_line.qu
  WHERE customer.city = :city
  GROUP BY artist.name, track.name
 HAVING Sum(invoice_line.quantity) >= :min_sold
- ORDER BY 1, 3;
+ ORDER BY 1, 3
