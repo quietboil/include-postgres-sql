@@ -1,3 +1,5 @@
+pub use ::futures_util::{TryStreamExt, pin_mut};
+
 #[macro_export]
 macro_rules! impl_sql {
     ( $sql_name:ident = $( { $kind:tt $name:ident ($($variant:tt $param:ident $ptype:tt)*) $doc:literal $s:tt $( $text:tt )+ } ),+ ) => {
@@ -124,11 +126,11 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
         where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let rows = self.query_raw( $text, [] as [&(dyn ::tokio_postgres::types::ToSql + Sync); 0] ).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 while let Some(row) = rows.try_next().await? {
                     row_cb(row)?;
                 }
@@ -141,14 +143,14 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
         where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let rows = self.query_raw(
                     $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
                     [& $head as &(dyn ::tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
                 ).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 while let Some(row) = rows.try_next().await? {
                     row_cb(row)?;
                 }
@@ -161,7 +163,7 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<(),::tokio_postgres::Error>> + Send + 'tr>>
         where F: FnMut(::tokio_postgres::Row) -> ::std::result::Result<(),::tokio_postgres::Error>, F: Send, F: 'tr, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let mut stmt = ::std::string::String::with_capacity($crate::sql_len!($($text)+));
@@ -169,7 +171,7 @@ macro_rules! impl_method {
                 let mut i = 0;
                 $crate::dynamic_sql!(stmt args i $($text)+);
                 let rows = self.query_raw(&stmt, args).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 while let Some(row) = rows.try_next().await? {
                     row_cb(row)?;
                 }
@@ -182,7 +184,7 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(
                 self.query_raw( $text, [] as [&(dyn ::tokio_postgres::types::ToSql + Sync); 0] )
@@ -194,7 +196,7 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 self.query_raw(
@@ -209,7 +211,7 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::tokio_postgres::RowStream,::tokio_postgres::Error>> + Send + 'tr>>
         where Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let mut stmt = ::std::string::String::with_capacity($crate::sql_len!($($text)+));
@@ -225,11 +227,11 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
         where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let rows = self.query_raw( $text, [] as [&(dyn ::tokio_postgres::types::ToSql + Sync); 0] ).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 let mut data = ::std::vec::Vec::new();
                 while let Some(row) = rows.try_next().await? {
                     let item = R::try_from(row)?;
@@ -244,14 +246,14 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
         where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let rows = self.query_raw(
                     $crate::sql_literal!( $head $($tail)* => $($text)+ ) ,
                     [& $head as &(dyn ::tokio_postgres::types::ToSql + Sync) $(, & $tail)* ]
                 ).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 let mut data = ::std::vec::Vec::new();
                 while let Some(row) = rows.try_next().await? {
                     let item = R::try_from(row)?;
@@ -266,7 +268,7 @@ macro_rules! impl_method {
         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::result::Result<::std::vec::Vec<R>,::tokio_postgres::Error>> + Send + 'tr>>
         where R: Send, R: ::std::convert::TryFrom<::tokio_postgres::Row>, ::tokio_postgres::Error: ::std::convert::From<R::Error>, Self: 'tr, 'st: 'tr $(, $lt : 'tr)*
         {
-            use ::futures_util::TryStreamExt;
+            use $crate::async_await::TryStreamExt;
 
             ::std::boxed::Box::pin(async move {
                 let mut stmt = ::std::string::String::with_capacity($crate::sql_len!($($text)+));
@@ -274,7 +276,7 @@ macro_rules! impl_method {
                 let mut i = 0;
                 $crate::dynamic_sql!(stmt args i $($text)+);
                 let rows = self.query_raw(&stmt, args).await?;
-                ::futures_util::pin_mut!(rows);
+                $crate::async_await::pin_mut!(rows);
                 let mut data = ::std::vec::Vec::new();
                 while let Some(row) = rows.try_next().await? {
                     let item = R::try_from(row)?;

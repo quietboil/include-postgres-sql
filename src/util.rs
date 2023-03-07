@@ -1,3 +1,5 @@
+pub use ::include_sql::index_of;
+
 #[macro_export]
 #[doc(hidden)]
 macro_rules! sql_literal {
@@ -5,11 +7,11 @@ macro_rules! sql_literal {
         $text
     };
     ($($name:ident)+ => $text:literal : $param:ident) => {
-        ::std::concat!( $text, '$', ::include_sql::index_of!($param in [ $( $name ),+ ] + 1) )
+        ::std::concat!( $text, '$', $crate::util::index_of!($param in [ $( $name ),+ ] + 1) )
     };
     ($($name:ident)+ => $text:literal : $param:ident $($tail:tt)+) => {
         ::std::concat!(
-            $text, '$', ::include_sql::index_of!($param in [ $( $name ),+ ] + 1),
+            $text, '$', $crate::util::index_of!($param in [ $( $name ),+ ] + 1),
             $crate::sql_literal!($($name)+ => $($tail)+)
         )
     };
